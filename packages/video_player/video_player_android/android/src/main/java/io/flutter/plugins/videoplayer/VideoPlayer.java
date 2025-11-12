@@ -24,6 +24,7 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
 import io.flutter.view.TextureRegistry.SurfaceProducer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A class responsible for managing video playback using {@link ExoPlayer}.
@@ -253,15 +254,53 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
     // Get the current tracks from ExoPlayer
     Tracks tracks = exoPlayer.getCurrentTracks();
 
+    // Check if we have a manual override for video tracks (not in auto mode)
+    boolean hasManualOverride = false;
+    TrackGroup manuallySelectedTrackGroup = null;
+    int manuallySelectedTrackIndex = -1;
+
+    if (trackSelector != null) {
+      DefaultTrackSelector.Parameters parameters = trackSelector.getParameters();
+      // Check if there's an override for video track type
+      for (Map.Entry<TrackGroup, TrackSelectionOverride> entry :
+          parameters.overrides.entrySet()) {
+        TrackGroup trackGroup = entry.getKey();
+        TrackSelectionOverride override = entry.getValue();
+        // Check if this override is for a video track
+        if (trackGroup.length > 0 && trackGroup.getFormat(0).sampleMimeType != null) {
+          String mimeType = trackGroup.getFormat(0).sampleMimeType;
+          if (mimeType.startsWith("video/")) {
+            hasManualOverride = true;
+            manuallySelectedTrackGroup = trackGroup;
+            // Get the first selected track index from the override
+            if (override.trackIndices.size() > 0) {
+              manuallySelectedTrackIndex = override.trackIndices.get(0);
+            }
+            break;
+          }
+        }
+      }
+    }
+
     // Iterate through all track groups
     for (int groupIndex = 0; groupIndex < tracks.getGroups().size(); groupIndex++) {
       Tracks.Group group = tracks.getGroups().get(groupIndex);
 
       // Only process video tracks
       if (group.getType() == C.TRACK_TYPE_VIDEO) {
+        TrackGroup trackGroup = group.getMediaTrackGroup();
+
         for (int trackIndex = 0; trackIndex < group.length; trackIndex++) {
           Format format = group.getTrackFormat(trackIndex);
-          boolean isSelected = group.isTrackSelected(trackIndex);
+
+          // A track is only "selected" if:
+          // 1. We have a manual override (not in auto mode), AND
+          // 2. This track group matches the manually selected group, AND
+          // 3. This track index matches the manually selected index
+          boolean isSelected =
+              hasManualOverride
+                  && trackGroup.equals(manuallySelectedTrackGroup)
+                  && trackIndex == manuallySelectedTrackIndex;
 
           // Create video track data with metadata
           ExoPlayerVideoTrackData videoTrack =

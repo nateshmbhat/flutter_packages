@@ -119,7 +119,9 @@ abstract class VideoPlayerPlatform extends PlatformInterface {
 
   /// Sets whether the video should continue to play in the background.
   Future<void> setAllowBackgroundPlayback(bool allowBackgroundPlayback) {
-    throw UnimplementedError('setAllowBackgroundPlayback() has not been implemented.');
+    throw UnimplementedError(
+      'setAllowBackgroundPlayback() has not been implemented.',
+    );
   }
 
   /// Sets additional options on web.
@@ -342,8 +344,14 @@ class VideoEvent {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(eventType, duration, size, rotationCorrection, buffered, isPlaying);
+  int get hashCode => Object.hash(
+    eventType,
+    duration,
+    size,
+    rotationCorrection,
+    buffered,
+    isPlaying,
+  );
 }
 
 /// Type of the event.
@@ -569,7 +577,10 @@ class VideoViewOptions {
 @immutable
 class VideoCreationOptions {
   /// Constructs an instance of [VideoCreationOptions].
-  const VideoCreationOptions({required this.dataSource, required this.viewType});
+  const VideoCreationOptions({
+    required this.dataSource,
+    required this.viewType,
+  });
 
   /// The data source used to create the player.
   final DataSource dataSource;
@@ -736,8 +747,16 @@ class VideoTrack {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, label, isSelected, bitrate, width, height, frameRate, codec);
+  int get hashCode => Object.hash(
+    id,
+    label,
+    isSelected,
+    bitrate,
+    width,
+    height,
+    frameRate,
+    codec,
+  );
 
   @override
   String toString() =>

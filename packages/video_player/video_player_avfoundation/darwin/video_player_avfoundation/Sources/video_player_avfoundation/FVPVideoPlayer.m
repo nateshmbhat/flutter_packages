@@ -77,6 +77,10 @@ static NSDictionary<NSString *, NSValue *> *FVPGetPlayerItemObservations(void) {
   NSArray<AVMediaSelectionOption *> *_cachedAudioSelectionOptions;
   // Cached media selection options for video tracks (HLS streams)
   NSArray<AVMediaSelectionOption *> *_cachedVideoSelectionOptions;
+  // Track whether user has manually selected a video track (vs auto selection)
+  BOOL _isManualVideoSelection;
+  // The manually selected video option (nil if in auto mode)
+  AVMediaSelectionOption *_manuallySelectedVideoOption;
 }
 
 - (instancetype)initWithPlayerItem:(AVPlayerItem *)item
@@ -159,6 +163,9 @@ static NSDictionary<NSString *, NSValue *> *FVPGetPlayerItemObservations(void) {
   // Clear cached audio and video selection options
   _cachedAudioSelectionOptions = nil;
   _cachedVideoSelectionOptions = nil;
+  // Reset video selection tracking
+  _isManualVideoSelection = NO;
+  _manuallySelectedVideoOption = nil;
 
   [self.player replaceCurrentItemWithPlayerItem:nil];
 
@@ -722,7 +729,12 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
       NSString *displayName = option.displayName;
 
-      BOOL isSelected = (currentSelection == option) || [currentSelection isEqual:option];
+      // A track is "selected" only if:
+      // 1. User has manually selected a track (not in auto mode), AND
+      // 2. This option matches the manually selected option
+      BOOL isSelected = _isManualVideoSelection &&
+                        (_manuallySelectedVideoOption == option ||
+                         [_manuallySelectedVideoOption isEqual:option]);
 
       // Try to extract metadata for bitrate, resolution, etc.
       NSNumber *bitrate = nil;
@@ -896,6 +908,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
           [asset mediaSelectionGroupForMediaCharacteristic:AVMediaCharacteristicVisual];
       if (videoGroup) {
         [currentItem selectMediaOption:option inMediaSelectionGroup:videoGroup];
+        // Track that user has manually selected a video track
+        _isManualVideoSelection = YES;
+        _manuallySelectedVideoOption = option;
       }
     }
   } else if ([trackType isEqualToString:@"auto"]) {
@@ -905,6 +920,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     if (videoGroup) {
       // Passing nil option enables automatic selection
       [currentItem selectMediaOption:nil inMediaSelectionGroup:videoGroup];
+      // Track that we're now in auto mode
+      _isManualVideoSelection = NO;
+      _manuallySelectedVideoOption = nil;
     }
   }
   // For asset tracks, we don't have a direct way to select them in AVFoundation
