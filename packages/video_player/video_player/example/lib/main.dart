@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import 'audio_tracks_demo.dart';
+import 'video_tracks_demo.dart';
 
 void main() {
   runApp(MaterialApp(home: _App()));
@@ -48,6 +49,19 @@ class _App extends StatelessWidget {
                   context,
                   MaterialPageRoute<AudioTracksDemo>(
                     builder: (BuildContext context) => const AudioTracksDemo(),
+                  ),
+                );
+              },
+            ),
+            IconButton(
+              key: const ValueKey<String>('video_tracks_demo'),
+              icon: const Icon(Icons.high_quality),
+              tooltip: 'Video Quality Demo',
+              onPressed: () {
+                Navigator.push<VideoTracksDemo>(
+                  context,
+                  MaterialPageRoute<VideoTracksDemo>(
+                    builder: (BuildContext context) => const VideoTracksDemo(),
                   ),
                 );
               },

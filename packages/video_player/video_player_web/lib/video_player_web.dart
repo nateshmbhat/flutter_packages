@@ -188,4 +188,22 @@ class VideoPlayerPlugin extends VideoPlayerPlatform {
     // Not supported in web platform currently
     return false;
   }
+
+  @override
+  Future<List<VideoTrack>> getVideoTracks(int playerId) async {
+    // Not supported in web platform currently
+    throw UnimplementedError('getVideoTracks() is not supported on web');
+  }
+
+  @override
+  Future<void> selectVideoTrack(int playerId, String? trackId) async {
+    // Not supported in web platform currently
+    throw UnimplementedError('selectVideoTrack() is not supported on web');
+  }
+
+  @override
+  bool isVideoTrackSupportAvailable() {
+    // Not supported in web platform currently
+    return false;
+  }
 }

@@ -245,6 +245,119 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
     }
   }
 
+  @UnstableApi
+  @Override
+  public @NonNull NativeVideoTrackData getVideoTracks() {
+    List<ExoPlayerVideoTrackData> videoTracks = new ArrayList<>();
+
+    // Get the current tracks from ExoPlayer
+    Tracks tracks = exoPlayer.getCurrentTracks();
+
+    // Iterate through all track groups
+    for (int groupIndex = 0; groupIndex < tracks.getGroups().size(); groupIndex++) {
+      Tracks.Group group = tracks.getGroups().get(groupIndex);
+
+      // Only process video tracks
+      if (group.getType() == C.TRACK_TYPE_VIDEO) {
+        for (int trackIndex = 0; trackIndex < group.length; trackIndex++) {
+          Format format = group.getTrackFormat(trackIndex);
+          boolean isSelected = group.isTrackSelected(trackIndex);
+
+          // Create video track data with metadata
+          ExoPlayerVideoTrackData videoTrack =
+              new ExoPlayerVideoTrackData(
+                  (long) groupIndex,
+                  (long) trackIndex,
+                  format.label,
+                  isSelected,
+                  format.bitrate != Format.NO_VALUE ? (long) format.bitrate : null,
+                  format.width != Format.NO_VALUE ? (long) format.width : null,
+                  format.height != Format.NO_VALUE ? (long) format.height : null,
+                  format.frameRate != Format.NO_VALUE ? (double) format.frameRate : null,
+                  format.codecs != null ? format.codecs : null);
+
+          videoTracks.add(videoTrack);
+        }
+      }
+    }
+    return new NativeVideoTrackData(videoTracks);
+  }
+
+  @UnstableApi
+  @Override
+  public void selectVideoTrack(long groupIndex, long trackIndex) {
+    if (trackSelector == null) {
+      Log.w("VideoPlayer", "Cannot select video track: track selector is null");
+      return;
+    }
+
+    try {
+      // Special handling for auto quality selection
+      if (groupIndex == -1 && trackIndex == -1) {
+        // Clear video track override to enable adaptive streaming
+        trackSelector.setParameters(
+            trackSelector.buildUponParameters().clearOverridesOfType(C.TRACK_TYPE_VIDEO).build());
+        return;
+      }
+
+      // Get current tracks
+      Tracks tracks = exoPlayer.getCurrentTracks();
+
+      if (groupIndex >= tracks.getGroups().size()) {
+        Log.w(
+            "VideoPlayer",
+            "Cannot select video track: groupIndex "
+                + groupIndex
+                + " is out of bounds (available groups: "
+                + tracks.getGroups().size()
+                + ")");
+        return;
+      }
+
+      Tracks.Group group = tracks.getGroups().get((int) groupIndex);
+
+      // Verify it's a video track and the track index is valid
+      if (group.getType() != C.TRACK_TYPE_VIDEO || (int) trackIndex >= group.length) {
+        if (group.getType() != C.TRACK_TYPE_VIDEO) {
+          Log.w(
+              "VideoPlayer",
+              "Cannot select video track: group at index "
+                  + groupIndex
+                  + " is not a video track (type: "
+                  + group.getType()
+                  + ")");
+        } else {
+          Log.w(
+              "VideoPlayer",
+              "Cannot select video track: trackIndex "
+                  + trackIndex
+                  + " is out of bounds (available tracks in group: "
+                  + group.length
+                  + ")");
+        }
+        return;
+      }
+
+      // Get the track group and create a selection override
+      TrackGroup trackGroup = group.getMediaTrackGroup();
+      TrackSelectionOverride override = new TrackSelectionOverride(trackGroup, (int) trackIndex);
+
+      // Apply the track selection override
+      trackSelector.setParameters(
+          trackSelector.buildUponParameters().setOverrideForType(override).build());
+
+    } catch (ArrayIndexOutOfBoundsException e) {
+      Log.w(
+          "VideoPlayer",
+          "Cannot select video track: invalid indices (groupIndex: "
+              + groupIndex
+              + ", trackIndex: "
+              + trackIndex
+              + "). "
+              + e.getMessage());
+    }
+  }
+
   public void dispose() {
     if (disposeHandler != null) {
       disposeHandler.onDispose();

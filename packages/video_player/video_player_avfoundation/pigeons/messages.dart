@@ -113,6 +113,63 @@ class NativeAudioTrackData {
   List<MediaSelectionAudioTrackData>? mediaSelectionTracks;
 }
 
+/// Raw video track data from AVAssetTrack (for regular assets).
+class AssetVideoTrackData {
+  AssetVideoTrackData({
+    required this.trackId,
+    this.label,
+    required this.isSelected,
+    this.bitrate,
+    this.width,
+    this.height,
+    this.frameRate,
+    this.codec,
+  });
+
+  int trackId;
+  String? label;
+  bool isSelected;
+  int? bitrate;
+  int? width;
+  int? height;
+  double? frameRate;
+  String? codec;
+}
+
+/// Raw video track data from AVMediaSelectionOption (for HLS streams).
+class MediaSelectionVideoTrackData {
+  MediaSelectionVideoTrackData({
+    required this.index,
+    this.displayName,
+    required this.isSelected,
+    this.bitrate,
+    this.width,
+    this.height,
+    this.frameRate,
+    this.codec,
+  });
+
+  int index;
+  String? displayName;
+  bool isSelected;
+  int? bitrate;
+  int? width;
+  int? height;
+  double? frameRate;
+  String? codec;
+}
+
+/// Container for raw video track data from native platforms.
+class NativeVideoTrackData {
+  NativeVideoTrackData({this.assetTracks, this.mediaSelectionTracks});
+
+  /// Asset-based tracks (for regular video files)
+  List<AssetVideoTrackData>? assetTracks;
+
+  /// Media selection-based tracks (for HLS streams)
+  List<MediaSelectionVideoTrackData>? mediaSelectionTracks;
+}
+
 @HostApi()
 abstract class AVFoundationVideoPlayerApi {
   @ObjCSelector('initialize')
@@ -150,4 +207,8 @@ abstract class VideoPlayerInstanceApi {
   NativeAudioTrackData getAudioTracks();
   @ObjCSelector('selectAudioTrackWithType:trackId:')
   void selectAudioTrack(String trackType, int trackId);
+  @ObjCSelector('getVideoTracks')
+  NativeVideoTrackData getVideoTracks();
+  @ObjCSelector('selectVideoTrackWithType:trackId:')
+  void selectVideoTrack(String trackType, int trackId);
 }

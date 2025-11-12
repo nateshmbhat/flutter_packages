@@ -108,6 +108,90 @@ class VideoAudioTrack {
       'codec: $codec)';
 }
 
+/// Represents a video track in a video with its metadata.
+@immutable
+class VideoTrack {
+  /// Constructs an instance of [VideoTrack].
+  const VideoTrack({
+    required this.id,
+    required this.label,
+    required this.isSelected,
+    this.bitrate,
+    this.width,
+    this.height,
+    this.frameRate,
+    this.codec,
+  });
+
+  /// Unique identifier for the video track.
+  final String id;
+
+  /// Human-readable label for the track.
+  final String label;
+
+  /// Whether this track is currently selected.
+  final bool isSelected;
+
+  /// Bitrate of the video track in bits per second.
+  /// May be null if not available from the platform.
+  final int? bitrate;
+
+  /// Width of the video track in pixels.
+  /// May be null if not available from the platform.
+  final int? width;
+
+  /// Height of the video track in pixels.
+  /// May be null if not available from the platform.
+  final int? height;
+
+  /// Frame rate of the video track in frames per second.
+  /// May be null if not available from the platform.
+  final double? frameRate;
+
+  /// Video codec used (e.g., 'h264', 'hevc', 'vp9').
+  /// May be null if not available from the platform.
+  final String? codec;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is VideoTrack &&
+            runtimeType == other.runtimeType &&
+            id == other.id &&
+            label == other.label &&
+            isSelected == other.isSelected &&
+            bitrate == other.bitrate &&
+            width == other.width &&
+            height == other.height &&
+            frameRate == other.frameRate &&
+            codec == other.codec;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    label,
+    isSelected,
+    bitrate,
+    width,
+    height,
+    frameRate,
+    codec,
+  );
+
+  @override
+  String toString() =>
+      'VideoTrack('
+      'id: $id, '
+      'label: $label, '
+      'isSelected: $isSelected, '
+      'bitrate: $bitrate, '
+      'width: $width, '
+      'height: $height, '
+      'frameRate: $frameRate, '
+      'codec: $codec)';
+}
+
 /// Converts a platform interface [VideoAudioTrack] to the public API type.
 ///
 /// This internal method is used to decouple the public API from the
@@ -127,6 +211,25 @@ VideoAudioTrack _convertPlatformAudioTrack(
     bitrate: platformTrack.bitrate,
     sampleRate: platformTrack.sampleRate,
     channelCount: platformTrack.channelCount,
+    codec: platformTrack.codec,
+  );
+}
+
+/// Converts a platform-specific video track to the public API video track.
+///
+/// Normalizes null values from the platform to provide a consistent API:
+/// - null label becomes 'Unknown'
+VideoTrack _convertPlatformVideoTrack(
+  platform_interface.VideoTrack platformTrack,
+) {
+  return VideoTrack(
+    id: platformTrack.id,
+    label: platformTrack.label ?? 'Unknown',
+    isSelected: platformTrack.isSelected,
+    bitrate: platformTrack.bitrate,
+    width: platformTrack.width,
+    height: platformTrack.height,
+    frameRate: platformTrack.frameRate,
     codec: platformTrack.codec,
   );
 }
@@ -981,6 +1084,77 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
   /// ```
   bool isAudioTrackSupportAvailable() {
     return _videoPlayerPlatform.isAudioTrackSupportAvailable();
+  }
+
+  /// Gets the available video tracks for the video.
+  ///
+  /// Returns a list of [VideoTrack] objects containing metadata about
+  /// each available video track (quality variant). The list may be empty
+  /// if no video tracks are available or if the video is not initialized.
+  ///
+  /// For HLS/DASH adaptive streams, this returns the different quality
+  /// variants available. Each track contains information about bitrate,
+  /// resolution, frame rate, and codec.
+  ///
+  /// Throws an exception if the video player is disposed.
+  Future<List<VideoTrack>> getVideoTracks() async {
+    if (_isDisposed) {
+      throw Exception('VideoPlayerController is disposed');
+    }
+    if (!value.isInitialized) {
+      return <VideoTrack>[];
+    }
+    final List<platform_interface.VideoTrack> platformTracks =
+        await _videoPlayerPlatform.getVideoTracks(_playerId);
+    return platformTracks.map(_convertPlatformVideoTrack).toList();
+  }
+
+  /// Selects which video track is chosen for playback.
+  ///
+  /// Pass a [VideoTrack] object (from [getVideoTracks]) to select a specific
+  /// quality variant. Pass `null` to enable automatic quality selection
+  /// (adaptive bitrate streaming).
+  ///
+  /// Example:
+  /// ```dart
+  /// // Get available tracks
+  /// final tracks = await controller.getVideoTracks();
+  ///
+  /// // Select a specific quality
+  /// await controller.selectVideoTrack(tracks[0]);
+  ///
+  /// // Or enable auto quality
+  /// await controller.selectVideoTrack(null);
+  /// ```
+  ///
+  /// Throws an exception if the video player is disposed or not initialized.
+  Future<void> selectVideoTrack(VideoTrack? track) async {
+    if (_isDisposedOrNotInitialized) {
+      throw Exception('VideoPlayerController is disposed or not initialized');
+    }
+    await _videoPlayerPlatform.selectVideoTrack(_playerId, track?.id);
+  }
+
+  /// Returns whether video track selection is supported on this platform.
+  ///
+  /// This method allows developers to query at runtime whether the current
+  /// platform supports video track selection functionality. This is useful
+  /// for platforms like web where video track selection may not be available.
+  ///
+  /// Returns `true` if [getVideoTracks] and [selectVideoTrack] are supported,
+  /// `false` otherwise.
+  ///
+  /// Example usage:
+  /// ```dart
+  /// if (controller.isVideoTrackSupportAvailable()) {
+  ///   final tracks = await controller.getVideoTracks();
+  ///   // Show quality selection UI
+  /// } else {
+  ///   // Hide quality selection UI or show unsupported message
+  /// }
+  /// ```
+  bool isVideoTrackSupportAvailable() {
+    return _videoPlayerPlatform.isVideoTrackSupportAvailable();
   }
 
   bool get _isDisposedOrNotInitialized => _isDisposed || !value.isInitialized;

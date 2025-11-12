@@ -283,6 +283,87 @@ class AVFoundationVideoPlayer extends VideoPlayerPlatform {
   }
 
   @override
+  Future<List<VideoTrack>> getVideoTracks(int playerId) async {
+    final NativeVideoTrackData nativeData = await _playerWith(
+      id: playerId,
+    ).getVideoTracks();
+    final List<VideoTrack> tracks = <VideoTrack>[];
+
+    // Convert asset tracks to VideoTrack
+    if (nativeData.assetTracks != null) {
+      for (final AssetVideoTrackData track in nativeData.assetTracks!) {
+        tracks.add(
+          VideoTrack(
+            id: track.trackId.toString(),
+            label: track.label,
+            isSelected: track.isSelected,
+            bitrate: track.bitrate,
+            width: track.width,
+            height: track.height,
+            frameRate: track.frameRate,
+            codec: track.codec,
+          ),
+        );
+      }
+    }
+
+    // Convert media selection tracks to VideoTrack (for HLS streams)
+    if (nativeData.mediaSelectionTracks != null) {
+      for (final MediaSelectionVideoTrackData track
+          in nativeData.mediaSelectionTracks!) {
+        final String trackId = 'media_selection_${track.index}';
+        tracks.add(
+          VideoTrack(
+            id: trackId,
+            label: track.displayName,
+            isSelected: track.isSelected,
+            bitrate: track.bitrate,
+            width: track.width,
+            height: track.height,
+            frameRate: track.frameRate,
+            codec: track.codec,
+          ),
+        );
+      }
+    }
+
+    return tracks;
+  }
+
+  @override
+  Future<void> selectVideoTrack(int playerId, String? trackId) {
+    // Handle null or 'auto' for automatic quality selection
+    if (trackId == null || trackId == 'auto') {
+      return _playerWith(
+        id: playerId,
+      ).selectVideoTrack('auto', 0);
+    }
+
+    // Parse the trackId to determine type and extract the integer ID
+    String trackType;
+    int numericTrackId;
+
+    if (trackId.startsWith('media_selection_')) {
+      trackType = 'mediaSelection';
+      numericTrackId = int.parse(trackId.substring('media_selection_'.length));
+    } else {
+      // Asset track - the trackId is just the integer as a string
+      trackType = 'asset';
+      numericTrackId = int.parse(trackId);
+    }
+
+    return _playerWith(
+      id: playerId,
+    ).selectVideoTrack(trackType, numericTrackId);
+  }
+
+  @override
+  bool isVideoTrackSupportAvailable() {
+    // iOS/macOS with AVFoundation supports video track selection
+    return true;
+  }
+
+  @override
   Widget buildView(int playerId) {
     return buildViewWithOptions(VideoViewOptions(playerId: playerId));
   }

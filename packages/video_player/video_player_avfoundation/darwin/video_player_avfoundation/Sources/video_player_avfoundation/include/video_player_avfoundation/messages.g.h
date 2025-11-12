@@ -20,6 +20,9 @@ NS_ASSUME_NONNULL_BEGIN
 @class FVPAssetAudioTrackData;
 @class FVPMediaSelectionAudioTrackData;
 @class FVPNativeAudioTrackData;
+@class FVPAssetVideoTrackData;
+@class FVPMediaSelectionVideoTrackData;
+@class FVPNativeVideoTrackData;
 
 /// Information passed to the platform view creation.
 @interface FVPPlatformVideoViewCreationParams : NSObject
@@ -118,6 +121,62 @@ NS_ASSUME_NONNULL_BEGIN
     NSArray<FVPMediaSelectionAudioTrackData *> *mediaSelectionTracks;
 @end
 
+/// Raw video track data from AVAssetTrack (for regular assets).
+@interface FVPAssetVideoTrackData : NSObject
+/// `init` unavailable to enforce nonnull fields, see the `make` class method.
+- (instancetype)init NS_UNAVAILABLE;
++ (instancetype)makeWithTrackId:(NSInteger)trackId
+                          label:(nullable NSString *)label
+                     isSelected:(BOOL)isSelected
+                        bitrate:(nullable NSNumber *)bitrate
+                          width:(nullable NSNumber *)width
+                         height:(nullable NSNumber *)height
+                      frameRate:(nullable NSNumber *)frameRate
+                          codec:(nullable NSString *)codec;
+@property(nonatomic, assign) NSInteger trackId;
+@property(nonatomic, copy, nullable) NSString *label;
+@property(nonatomic, assign) BOOL isSelected;
+@property(nonatomic, strong, nullable) NSNumber *bitrate;
+@property(nonatomic, strong, nullable) NSNumber *width;
+@property(nonatomic, strong, nullable) NSNumber *height;
+@property(nonatomic, strong, nullable) NSNumber *frameRate;
+@property(nonatomic, copy, nullable) NSString *codec;
+@end
+
+/// Raw video track data from AVMediaSelectionOption (for HLS streams).
+@interface FVPMediaSelectionVideoTrackData : NSObject
+/// `init` unavailable to enforce nonnull fields, see the `make` class method.
+- (instancetype)init NS_UNAVAILABLE;
++ (instancetype)makeWithIndex:(NSInteger)index
+                  displayName:(nullable NSString *)displayName
+                   isSelected:(BOOL)isSelected
+                      bitrate:(nullable NSNumber *)bitrate
+                        width:(nullable NSNumber *)width
+                       height:(nullable NSNumber *)height
+                    frameRate:(nullable NSNumber *)frameRate
+                        codec:(nullable NSString *)codec;
+@property(nonatomic, assign) NSInteger index;
+@property(nonatomic, copy, nullable) NSString *displayName;
+@property(nonatomic, assign) BOOL isSelected;
+@property(nonatomic, strong, nullable) NSNumber *bitrate;
+@property(nonatomic, strong, nullable) NSNumber *width;
+@property(nonatomic, strong, nullable) NSNumber *height;
+@property(nonatomic, strong, nullable) NSNumber *frameRate;
+@property(nonatomic, copy, nullable) NSString *codec;
+@end
+
+/// Container for raw video track data from native platforms.
+@interface FVPNativeVideoTrackData : NSObject
++ (instancetype)makeWithAssetTracks:(nullable NSArray<FVPAssetVideoTrackData *> *)assetTracks
+               mediaSelectionTracks:
+                   (nullable NSArray<FVPMediaSelectionVideoTrackData *> *)mediaSelectionTracks;
+/// Asset-based tracks (for regular video files)
+@property(nonatomic, copy, nullable) NSArray<FVPAssetVideoTrackData *> *assetTracks;
+/// Media selection-based tracks (for HLS streams)
+@property(nonatomic, copy, nullable)
+    NSArray<FVPMediaSelectionVideoTrackData *> *mediaSelectionTracks;
+@end
+
 /// The codec used by all APIs.
 NSObject<FlutterMessageCodec> *FVPGetMessagesCodec(void);
 
@@ -157,6 +216,11 @@ extern void SetUpFVPAVFoundationVideoPlayerApiWithSuffix(
 /// @return `nil` only when `error != nil`.
 - (nullable FVPNativeAudioTrackData *)getAudioTracks:(FlutterError *_Nullable *_Nonnull)error;
 - (void)selectAudioTrackWithType:(NSString *)trackType
+                         trackId:(NSInteger)trackId
+                           error:(FlutterError *_Nullable *_Nonnull)error;
+/// @return `nil` only when `error != nil`.
+- (nullable FVPNativeVideoTrackData *)getVideoTracks:(FlutterError *_Nullable *_Nonnull)error;
+- (void)selectVideoTrackWithType:(NSString *)trackType
                          trackId:(NSInteger)trackId
                            error:(FlutterError *_Nullable *_Nonnull)error;
 @end

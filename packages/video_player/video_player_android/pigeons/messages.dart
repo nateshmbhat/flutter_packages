@@ -148,6 +148,39 @@ class NativeAudioTrackData {
   List<ExoPlayerAudioTrackData>? exoPlayerTracks;
 }
 
+/// Raw video track data from ExoPlayer Format objects.
+class ExoPlayerVideoTrackData {
+  ExoPlayerVideoTrackData({
+    required this.groupIndex,
+    required this.trackIndex,
+    this.label,
+    required this.isSelected,
+    this.bitrate,
+    this.width,
+    this.height,
+    this.frameRate,
+    this.codec,
+  });
+
+  int groupIndex;
+  int trackIndex;
+  String? label;
+  bool isSelected;
+  int? bitrate;
+  int? width;
+  int? height;
+  double? frameRate;
+  String? codec;
+}
+
+/// Container for raw video track data from Android ExoPlayer.
+class NativeVideoTrackData {
+  NativeVideoTrackData({this.exoPlayerTracks});
+
+  /// ExoPlayer-based tracks
+  List<ExoPlayerVideoTrackData>? exoPlayerTracks;
+}
+
 @HostApi()
 abstract class AndroidVideoPlayerApi {
   void initialize();
@@ -192,6 +225,12 @@ abstract class VideoPlayerInstanceApi {
 
   /// Selects which audio track is chosen for playback from its [groupIndex] and [trackIndex]
   void selectAudioTrack(int groupIndex, int trackIndex);
+
+  /// Gets the available video tracks for the video.
+  NativeVideoTrackData getVideoTracks();
+
+  /// Selects which video track is chosen for playback from its [groupIndex] and [trackIndex]
+  void selectVideoTrack(int groupIndex, int trackIndex);
 }
 
 @EventChannelApi()

@@ -75,6 +75,8 @@ static NSDictionary<NSString *, NSValue *> *FVPGetPlayerItemObservations(void) {
   BOOL _listenersRegistered;
   // Cached media selection options for audio tracks (HLS streams)
   NSArray<AVMediaSelectionOption *> *_cachedAudioSelectionOptions;
+  // Cached media selection options for video tracks (HLS streams)
+  NSArray<AVMediaSelectionOption *> *_cachedVideoSelectionOptions;
 }
 
 - (instancetype)initWithPlayerItem:(AVPlayerItem *)item
@@ -154,8 +156,9 @@ static NSDictionary<NSString *, NSValue *> *FVPGetPlayerItemObservations(void) {
     FVPRemoveKeyValueObservers(self, FVPGetPlayerObservations(), self.player);
   }
 
-  // Clear cached audio selection options
+  // Clear cached audio and video selection options
   _cachedAudioSelectionOptions = nil;
+  _cachedVideoSelectionOptions = nil;
 
   [self.player replaceCurrentItemWithPlayerItem:nil];
 
@@ -679,6 +682,232 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   }
   // For asset tracks, we don't have a direct way to select them in AVFoundation
   // This would require more complex track selection logic that's not commonly used
+}
+
+- (nullable FVPNativeVideoTrackData *)getVideoTracks:(FlutterError *_Nullable *_Nonnull)error {
+  AVPlayerItem *currentItem = _player.currentItem;
+  if (!currentItem || !currentItem.asset) {
+    return [FVPNativeVideoTrackData makeWithAssetTracks:nil mediaSelectionTracks:nil];
+  }
+
+  AVAsset *asset = currentItem.asset;
+
+  // First, try to get tracks from media selection (for HLS streams with video variants)
+  AVMediaSelectionGroup *videoGroup =
+      [asset mediaSelectionGroupForMediaCharacteristic:AVMediaCharacteristicVisual];
+  if (videoGroup && videoGroup.options.count > 0) {
+    // Cache the options array for later use in selectVideoTrack
+    _cachedVideoSelectionOptions = videoGroup.options;
+
+    NSMutableArray<FVPMediaSelectionVideoTrackData *> *mediaSelectionTracks =
+        [[NSMutableArray alloc] init];
+    AVMediaSelectionOption *currentSelection = nil;
+    if (@available(iOS 11.0, macOS 10.13, *)) {
+      AVMediaSelection *mediaSelection = currentItem.currentMediaSelection;
+      currentSelection = [mediaSelection selectedMediaOptionInMediaSelectionGroup:videoGroup];
+    } else {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+      currentSelection = [currentItem selectedMediaOptionInMediaSelectionGroup:videoGroup];
+#pragma clang diagnostic pop
+    }
+
+    for (NSInteger i = 0; i < videoGroup.options.count; i++) {
+      AVMediaSelectionOption *option = videoGroup.options[i];
+
+      // Skip nil options
+      if (!option || [option isKindOfClass:[NSNull class]]) {
+        continue;
+      }
+
+      NSString *displayName = option.displayName;
+
+      BOOL isSelected = (currentSelection == option) || [currentSelection isEqual:option];
+
+      // Try to extract metadata for bitrate, resolution, etc.
+      NSNumber *bitrate = nil;
+      NSNumber *width = nil;
+      NSNumber *height = nil;
+      NSNumber *frameRate = nil;
+      NSString *codec = nil;
+
+      // Try to get video format information from the option
+      // Note: AVMediaSelectionOption doesn't directly expose all format details
+      // We can try to extract some info from associated media characteristics
+      if (option.commonMetadata.count > 0) {
+        for (AVMetadataItem *item in option.commonMetadata) {
+          // Extract any available metadata
+          if ([item.commonKey isEqualToString:AVMetadataCommonKeyDescription]) {
+            // Sometimes resolution or bitrate info is in description
+          }
+        }
+      }
+
+      FVPMediaSelectionVideoTrackData *trackData =
+          [FVPMediaSelectionVideoTrackData makeWithIndex:i
+                                             displayName:displayName
+                                              isSelected:isSelected
+                                                 bitrate:bitrate
+                                                   width:width
+                                                  height:height
+                                               frameRate:frameRate
+                                                   codec:codec];
+
+      [mediaSelectionTracks addObject:trackData];
+    }
+
+    // Always return media selection tracks when there's a media selection group
+    return [FVPNativeVideoTrackData makeWithAssetTracks:nil
+                                   mediaSelectionTracks:mediaSelectionTracks];
+  }
+
+  // If no media selection group or empty, try to get tracks from AVAsset (for regular video files)
+  NSArray<AVAssetTrack *> *assetVideoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
+  NSMutableArray<FVPAssetVideoTrackData *> *assetTracks = [[NSMutableArray alloc] init];
+
+  for (NSInteger i = 0; i < assetVideoTracks.count; i++) {
+    AVAssetTrack *track = assetVideoTracks[i];
+
+    // Extract metadata from the track
+    NSString *label = nil;
+
+    // Try to get label from metadata
+    for (AVMetadataItem *item in track.commonMetadata) {
+      if ([item.commonKey isEqualToString:AVMetadataCommonKeyTitle] && item.stringValue) {
+        label = item.stringValue;
+        break;
+      }
+    }
+
+    // Extract format information
+    NSNumber *bitrate = nil;
+    NSNumber *width = nil;
+    NSNumber *height = nil;
+    NSNumber *frameRate = nil;
+    NSString *codec = nil;
+
+    // Get dimensions
+    CGSize naturalSize = track.naturalSize;
+    if (naturalSize.width > 0) {
+      width = @((NSInteger)naturalSize.width);
+    }
+    if (naturalSize.height > 0) {
+      height = @((NSInteger)naturalSize.height);
+    }
+
+    // Get frame rate
+    if (track.nominalFrameRate > 0) {
+      frameRate = @(track.nominalFrameRate);
+    }
+
+    // Attempt format description parsing
+    if (track.formatDescriptions.count > 0) {
+      @try {
+        id formatDescObj = track.formatDescriptions[0];
+
+        // Validate that we have a valid format description object
+        if (formatDescObj && [formatDescObj respondsToSelector:@selector(self)]) {
+          NSString *className = NSStringFromClass([formatDescObj class]);
+
+          // Only process objects that are clearly Core Media format descriptions
+          if ([className hasPrefix:@"CMVideoFormatDescription"] ||
+              [className hasPrefix:@"CMFormatDescription"]) {
+            CMFormatDescriptionRef formatDesc = (__bridge CMFormatDescriptionRef)formatDescObj;
+
+            // Validate the format description reference before using Core Media APIs
+            if (formatDesc && CFGetTypeID(formatDesc) == CMFormatDescriptionGetTypeID()) {
+              // Get codec information
+              FourCharCode codecType = CMFormatDescriptionGetMediaSubType(formatDesc);
+              switch (codecType) {
+                case kCMVideoCodecType_H264:
+                  codec = @"h264";
+                  break;
+                case kCMVideoCodecType_HEVC:
+                  codec = @"hevc";
+                  break;
+                case kCMVideoCodecType_VP9:
+                  codec = @"vp9";
+                  break;
+                case kCMVideoCodecType_MPEG4Video:
+                  codec = @"mpeg4";
+                  break;
+                default:
+                  codec = nil;
+                  break;
+              }
+
+              // Get dimensions from format description (more accurate than naturalSize)
+              CMVideoDimensions dimensions = CMVideoFormatDescriptionGetDimensions(formatDesc);
+              if (dimensions.width > 0) {
+                width = @(dimensions.width);
+              }
+              if (dimensions.height > 0) {
+                height = @(dimensions.height);
+              }
+            }
+          }
+        }
+      } @catch (NSException *exception) {
+        // Handle any exceptions from format description parsing gracefully
+      }
+    }
+
+    // Estimate bitrate from track
+    if (track.estimatedDataRate > 0) {
+      bitrate = @((NSInteger)track.estimatedDataRate);
+    }
+
+    // For now, assume the first track is selected
+    BOOL isSelected = (i == 0);
+
+    FVPAssetVideoTrackData *trackData = [FVPAssetVideoTrackData makeWithTrackId:track.trackID
+                                                                          label:label
+                                                                     isSelected:isSelected
+                                                                        bitrate:bitrate
+                                                                          width:width
+                                                                         height:height
+                                                                      frameRate:frameRate
+                                                                          codec:codec];
+
+    [assetTracks addObject:trackData];
+  }
+
+  // Return asset tracks (even if empty), media selection tracks should be nil
+  return [FVPNativeVideoTrackData makeWithAssetTracks:assetTracks mediaSelectionTracks:nil];
+}
+
+- (void)selectVideoTrackWithType:(nonnull NSString *)trackType
+                         trackId:(NSInteger)trackId
+                           error:(FlutterError *_Nullable __autoreleasing *_Nonnull)error {
+  AVPlayerItem *currentItem = _player.currentItem;
+  if (!currentItem || !currentItem.asset) {
+    return;
+  }
+
+  AVAsset *asset = currentItem.asset;
+
+  // Check if this is a media selection track (for HLS streams)
+  if ([trackType isEqualToString:@"mediaSelection"]) {
+    // Validate that we have cached options and the trackId (index) is valid
+    if (_cachedVideoSelectionOptions && trackId >= 0 &&
+        trackId < (NSInteger)_cachedVideoSelectionOptions.count) {
+      AVMediaSelectionOption *option = _cachedVideoSelectionOptions[trackId];
+      AVMediaSelectionGroup *videoGroup =
+          [asset mediaSelectionGroupForMediaCharacteristic:AVMediaCharacteristicVisual];
+      if (videoGroup) {
+        [currentItem selectMediaOption:option inMediaSelectionGroup:videoGroup];
+      }
+    }
+  } else if ([trackType isEqualToString:@"auto"]) {
+    // Re-enable automatic quality selection for HLS streams
+    AVMediaSelectionGroup *videoGroup =
+        [asset mediaSelectionGroupForMediaCharacteristic:AVMediaCharacteristicVisual];
+    if (videoGroup) {
+      // Passing nil option enables automatic selection
+      [currentItem selectMediaOption:nil inMediaSelectionGroup:videoGroup];
+    }
+  }
+  // For asset tracks, we don't have a direct way to select them in AVFoundation
 }
 
 #pragma mark - Private
