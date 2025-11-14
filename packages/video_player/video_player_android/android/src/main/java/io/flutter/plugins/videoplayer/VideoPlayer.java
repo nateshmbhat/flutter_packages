@@ -7,6 +7,8 @@ package io.flutter.plugins.videoplayer;
 import static androidx.media3.common.Player.REPEAT_MODE_ALL;
 import static androidx.media3.common.Player.REPEAT_MODE_OFF;
 
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -381,7 +383,52 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
       TrackGroup trackGroup = group.getMediaTrackGroup();
       TrackSelectionOverride override = new TrackSelectionOverride(trackGroup, (int) trackIndex);
 
-      // Apply the track selection override
+      // Check if the new track has different dimensions than the current track
+      Format currentFormat = exoPlayer.getVideoFormat();
+      Format newFormat = trackGroup.getFormat((int) trackIndex);
+      boolean dimensionsChanged =
+          currentFormat != null
+              && (currentFormat.width != newFormat.width
+                  || currentFormat.height != newFormat.height);
+
+      // When video dimensions change, we need to force a complete renderer reset to avoid
+      // surface rendering issues. We do this by temporarily disabling the video track type,
+      // which causes ExoPlayer to release the current video renderer and MediaCodec decoder.
+      // After a brief delay, we re-enable video with the new track selection, which creates
+      // a fresh renderer properly configured for the new dimensions.
+      if (dimensionsChanged) {
+        final boolean wasPlaying = exoPlayer.isPlaying();
+        final long currentPosition = exoPlayer.getCurrentPosition();
+
+        // Disable video track type to force renderer release
+        trackSelector.setParameters(
+            trackSelector
+                .buildUponParameters()
+                .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
+                .build());
+
+        // Re-enable video with the new track selection after allowing renderer to release
+        new Handler(Looper.getMainLooper())
+            .postDelayed(
+                () -> {
+                  trackSelector.setParameters(
+                      trackSelector
+                          .buildUponParameters()
+                          .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
+                          .setOverrideForType(override)
+                          .build());
+
+                  // Restore playback state
+                  exoPlayer.seekTo(currentPosition);
+                  if (wasPlaying) {
+                    exoPlayer.play();
+                  }
+                },
+                150);
+        return;
+      }
+
+      // Apply the track selection override normally if dimensions haven't changed
       trackSelector.setParameters(
           trackSelector.buildUponParameters().setOverrideForType(override).build());
 

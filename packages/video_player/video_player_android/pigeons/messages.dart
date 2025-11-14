@@ -7,8 +7,7 @@ import 'package:pigeon/pigeon.dart';
 @ConfigurePigeon(
   PigeonOptions(
     dartOut: 'lib/src/messages.g.dart',
-    kotlinOut:
-        'android/src/main/kotlin/io/flutter/plugins/videoplayer/Messages.kt',
+    kotlinOut: 'android/src/main/kotlin/io/flutter/plugins/videoplayer/Messages.kt',
     kotlinOptions: KotlinOptions(package: 'io.flutter.plugins.videoplayer'),
     copyrightHeader: 'pigeons/copyright.txt',
   ),
@@ -57,6 +56,15 @@ class IsPlayingStateEvent extends PlatformVideoEvent {
 /// Corresponds to ExoPlayer's onTracksChanged.
 class AudioTrackChangedEvent extends PlatformVideoEvent {
   /// The ID of the newly selected audio track, if any.
+  late final String? selectedTrackId;
+}
+
+/// Sent when video tracks change.
+///
+/// This includes when the selected video track changes after calling selectVideoTrack.
+/// Corresponds to ExoPlayer's onTracksChanged.
+class VideoTrackChangedEvent extends PlatformVideoEvent {
+  /// The ID of the newly selected video track, if any.
   late final String? selectedTrackId;
 }
 

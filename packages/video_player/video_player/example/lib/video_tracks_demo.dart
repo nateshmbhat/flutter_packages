@@ -131,19 +131,18 @@ class _VideoTracksDemoState extends State<VideoTracksDemo> {
       if (!mounted) {
         return;
       }
-      final String trackDescription = track == null
-          ? 'Auto'
-          : '${track.label} (${_formatResolution(track)})';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Selected quality: $trackDescription')),
-      );
+      final String trackDescription =
+          track == null ? 'Auto' : '${track.label} (${_formatResolution(track)})';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Selected quality: $trackDescription')));
     } catch (e) {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to select video track: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to select video track: $e')));
     }
   }
 
@@ -214,12 +213,12 @@ class _VideoTracksDemoState extends State<VideoTracksDemo> {
               ),
               dropdownMenuEntries:
                   _sampleVideos.indexed.map(((int, String) record) {
-                final (int index, _) = record;
-                return DropdownMenuEntry<int>(
-                  value: index,
-                  label: 'Video ${index + 1}',
-                );
-              }).toList(),
+                    final (int index, _) = record;
+                    return DropdownMenuEntry<int>(
+                      value: index,
+                      label: 'Video ${index + 1}',
+                    );
+                  }).toList(),
               onSelected: (int? value) {
                 if (value != null && value != _selectedVideoIndex) {
                   setState(() {
@@ -267,10 +266,7 @@ class _VideoTracksDemoState extends State<VideoTracksDemo> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _initializeVideo,
-              child: const Text('Retry'),
-            ),
+            ElevatedButton(onPressed: _initializeVideo, child: const Text('Retry')),
           ],
         ),
       );
@@ -370,7 +366,9 @@ class _VideoTracksDemoState extends State<VideoTracksDemo> {
 
   Widget _buildAutoQualityTile() {
     // Check if auto is currently selected (no tracks are marked as selected)
-    final bool isAutoSelected = _videoTracks.every((VideoTrack track) => !track.isSelected);
+    final bool isAutoSelected = _videoTracks.every(
+      (VideoTrack track) => !track.isSelected,
+    );
 
     return Card(
       color: isAutoSelected ? Colors.blue[50] : null,
@@ -422,8 +420,7 @@ class _VideoTracksDemoState extends State<VideoTracksDemo> {
             Text('ID: ${track.id}'),
             if (track.width != null && track.height != null)
               Text('Resolution: ${track.width}x${track.height}'),
-            if (track.bitrate != null)
-              Text('Bitrate: ${_formatBitrate(track.bitrate)}'),
+            if (track.bitrate != null) Text('Bitrate: ${_formatBitrate(track.bitrate)}'),
             if (track.frameRate != null)
               Text('Frame Rate: ${track.frameRate!.toStringAsFixed(1)} fps'),
             if (track.codec != null) Text('Codec: ${track.codec}'),

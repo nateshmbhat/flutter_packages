@@ -17,9 +17,7 @@ VideoPlayerInstanceApi _productionApiProvider(int playerId) {
 }
 
 /// The non-test implementation of `_videoEventStreamProvider`.
-Stream<PlatformVideoEvent> _productionVideoEventStreamProvider(
-  String streamIdentifier,
-) {
+Stream<PlatformVideoEvent> _productionVideoEventStreamProvider(String streamIdentifier) {
   return pigeon.videoEvents(instanceName: streamIdentifier);
 }
 
@@ -29,8 +27,7 @@ class AndroidVideoPlayer extends VideoPlayerPlatform {
   /// Creates a new Android video player implementation instance.
   AndroidVideoPlayer({
     @visibleForTesting AndroidVideoPlayerApi? pluginApi,
-    @visibleForTesting
-    VideoPlayerInstanceApi Function(int playerId)? playerApiProvider,
+    @visibleForTesting VideoPlayerInstanceApi Function(int playerId)? playerApiProvider,
     Stream<PlatformVideoEvent> Function(String streamIdentifier)?
     videoEventStreamProvider,
   }) : _api = pluginApi ?? AndroidVideoPlayerApi(),
@@ -90,14 +87,9 @@ class AndroidVideoPlayer extends VideoPlayerPlatform {
       case DataSourceType.asset:
         final String? asset = dataSource.asset;
         if (asset == null) {
-          throw ArgumentError(
-            '"asset" must be non-null for an asset data source',
-          );
+          throw ArgumentError('"asset" must be non-null for an asset data source');
         }
-        final String key = await _api.getLookupKeyForAsset(
-          asset,
-          dataSource.package,
-        );
+        final String key = await _api.getLookupKeyForAsset(asset, dataSource.package);
         uri = 'asset:///$key';
       case DataSourceType.network:
         uri = dataSource.uri;
@@ -213,9 +205,7 @@ class AndroidVideoPlayer extends VideoPlayerPlatform {
     final VideoPlayerViewState viewState = _playerWith(id: playerId).viewState;
 
     return switch (viewState) {
-      VideoPlayerTextureViewState(:final int textureId) => Texture(
-        textureId: textureId,
-      ),
+      VideoPlayerTextureViewState(:final int textureId) => Texture(textureId: textureId),
       VideoPlayerPlatformViewState() => PlatformViewPlayer(playerId: playerId),
     };
   }
@@ -312,9 +302,7 @@ class AndroidVideoPlayer extends VideoPlayerPlatform {
     return player ?? (throw StateError('No active player with ID $id.'));
   }
 
-  PlatformVideoFormat? _platformVideoFormatFromVideoFormat(
-    VideoFormat? format,
-  ) {
+  PlatformVideoFormat? _platformVideoFormatFromVideoFormat(VideoFormat? format) {
     return switch (format) {
       VideoFormat.dash => PlatformVideoFormat.dash,
       VideoFormat.hls => PlatformVideoFormat.hls,
@@ -355,6 +343,8 @@ class _PlayerInstance {
   int _lastBufferPosition = -1;
   bool _isBuffering = false;
   Completer<void>? _audioTrackSelectionCompleter;
+  Completer<void>? _videoTrackSelectionCompleter;
+  String? _expectedVideoTrackId;
 
   final VideoPlayerViewState viewState;
 
@@ -437,18 +427,34 @@ class _PlayerInstance {
       return;
     }
 
-    // Parse the trackId to get groupIndex and trackIndex
+    // Parse the track ID (format: "groupIndex_trackIndex")
     final List<String> parts = trackId.split('_');
     if (parts.length != 2) {
-      throw ArgumentError(
-        'Invalid trackId format: "$trackId". Expected format: "groupIndex_trackIndex"',
-      );
+      throw ArgumentError('Invalid video track ID format: $trackId');
     }
 
     final int groupIndex = int.parse(parts[0]);
     final int trackIndex = int.parse(parts[1]);
 
-    await _api.selectVideoTrack(groupIndex, trackIndex);
+    // Create a completer to wait for the track selection to complete
+    _videoTrackSelectionCompleter = Completer<void>();
+    _expectedVideoTrackId = trackId;
+
+    try {
+      await _api.selectVideoTrack(groupIndex, trackIndex);
+
+      // Wait for the onTracksChanged event from ExoPlayer with a timeout
+      await _videoTrackSelectionCompleter!.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          // If we timeout, just continue - the track may still have been selected
+          debugPrint('Video track selection timed out');
+        },
+      );
+    } finally {
+      _videoTrackSelectionCompleter = null;
+      _expectedVideoTrackId = null;
+    }
   }
 
   Future<void> dispose() async {
@@ -535,9 +541,7 @@ class _PlayerInstance {
             // should be synchronous with the state change.
             break;
           case PlatformPlaybackState.ended:
-            _eventStreamController.add(
-              VideoEvent(eventType: VideoEventType.completed),
-            );
+            _eventStreamController.add(VideoEvent(eventType: VideoEventType.completed));
           case PlatformPlaybackState.unknown:
             // Ignore unknown states. This isn't an error since the media
             // framework could add new states in the future.
@@ -553,6 +557,19 @@ class _PlayerInstance {
         if (_audioTrackSelectionCompleter != null &&
             !_audioTrackSelectionCompleter!.isCompleted) {
           _audioTrackSelectionCompleter!.complete();
+        }
+      case final VideoTrackChangedEvent event:
+        // Complete the video track selection completer only if:
+        // 1. A completer exists (we're waiting for a selection)
+        // 2. The completer hasn't already completed
+        // 3. The selected track ID matches what we're expecting (or we're expecting null for auto)
+        if (_videoTrackSelectionCompleter != null &&
+            !_videoTrackSelectionCompleter!.isCompleted) {
+          // Complete if the track ID matches our expectation, or if we expected null (auto mode)
+          if (_expectedVideoTrackId == null ||
+              event.selectedTrackId == _expectedVideoTrackId) {
+            _videoTrackSelectionCompleter!.complete();
+          }
         }
     }
   }

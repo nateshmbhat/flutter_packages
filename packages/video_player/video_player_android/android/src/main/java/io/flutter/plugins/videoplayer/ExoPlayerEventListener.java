@@ -94,9 +94,17 @@ public abstract class ExoPlayerEventListener implements Player.Listener {
 
   @Override
   public void onTracksChanged(@NonNull Tracks tracks) {
-    // Find the currently selected audio track and notify
-    String selectedTrackId = findSelectedAudioTrackId(tracks);
-    events.onAudioTrackChanged(selectedTrackId);
+    // Check if audio tracks changed and notify
+    if (tracks.containsType(C.TRACK_TYPE_AUDIO)) {
+      String selectedAudioTrackId = findSelectedAudioTrackId(tracks);
+      events.onAudioTrackChanged(selectedAudioTrackId);
+    }
+
+    // Check if video tracks changed and notify
+    if (tracks.containsType(C.TRACK_TYPE_VIDEO)) {
+      String selectedVideoTrackId = findSelectedVideoTrackId(tracks);
+      events.onVideoTrackChanged(selectedVideoTrackId);
+    }
   }
 
   /**
@@ -110,6 +118,29 @@ public abstract class ExoPlayerEventListener implements Player.Listener {
     int groupIndex = 0;
     for (Tracks.Group group : tracks.getGroups()) {
       if (group.getType() == C.TRACK_TYPE_AUDIO && group.isSelected()) {
+        // Find the selected track within this group
+        for (int i = 0; i < group.length; i++) {
+          if (group.isTrackSelected(i)) {
+            return groupIndex + "_" + i;
+          }
+        }
+      }
+      groupIndex++;
+    }
+    return null;
+  }
+
+  /**
+   * Finds the ID of the currently selected video track.
+   *
+   * @param tracks The current tracks
+   * @return The track ID in format "groupIndex_trackIndex", or null if no video track is selected
+   */
+  @Nullable
+  private String findSelectedVideoTrackId(@NonNull Tracks tracks) {
+    int groupIndex = 0;
+    for (Tracks.Group group : tracks.getGroups()) {
+      if (group.getType() == C.TRACK_TYPE_VIDEO && group.isSelected()) {
         // Find the selected track within this group
         for (int i = 0; i < group.length; i++) {
           if (group.isTrackSelected(i)) {
