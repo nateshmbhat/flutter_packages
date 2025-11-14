@@ -77,10 +77,14 @@ static NSDictionary<NSString *, NSValue *> *FVPGetPlayerItemObservations(void) {
   NSArray<AVMediaSelectionOption *> *_cachedAudioSelectionOptions;
   // Cached media selection options for video tracks (HLS streams)
   NSArray<AVMediaSelectionOption *> *_cachedVideoSelectionOptions;
+  // Cached asset variants for video quality selection (iOS 15+)
+  NSArray *_cachedAssetVariants API_AVAILABLE(ios(15.0), macos(12.0));
   // Track whether user has manually selected a video track (vs auto selection)
   BOOL _isManualVideoSelection;
   // The manually selected video option (nil if in auto mode)
   AVMediaSelectionOption *_manuallySelectedVideoOption;
+  // The index of the manually selected variant (-1 if in auto mode)
+  NSInteger _selectedVariantIndex;
 }
 
 - (instancetype)initWithPlayerItem:(AVPlayerItem *)item
@@ -90,6 +94,11 @@ static NSDictionary<NSString *, NSValue *> *FVPGetPlayerItemObservations(void) {
   NSAssert(self, @"super init cannot be nil");
 
   _viewProvider = viewProvider;
+  
+  // Initialize video selection tracking flags
+  _isManualVideoSelection = NO;
+  _manuallySelectedVideoOption = nil;
+  _selectedVariantIndex = -1;
 
   AVAsset *asset = [item asset];
   void (^assetCompletionHandler)(void) = ^{
@@ -134,7 +143,12 @@ static NSDictionary<NSString *, NSValue *> *FVPGetPlayerItemObservations(void) {
   };
   _videoOutput = [avFactory videoOutputWithPixelBufferAttributes:pixBuffAttributes];
 
-  [asset loadValuesAsynchronouslyForKeys:@[ @"tracks" ] completionHandler:assetCompletionHandler];
+  // Load both tracks and variants (variants is available on iOS 15+)
+  NSMutableArray *keysToLoad = [NSMutableArray arrayWithObject:@"tracks"];
+  if (@available(iOS 15.0, macOS 12.0, *)) {
+    [keysToLoad addObject:@"variants"];
+  }
+  [asset loadValuesAsynchronouslyForKeys:keysToLoad completionHandler:assetCompletionHandler];
 
   return self;
 }
@@ -699,7 +713,112 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
   AVAsset *asset = currentItem.asset;
 
-  // First, try to get tracks from media selection (for HLS streams with video variants)
+  // For iOS 15+, use AVAssetVariant API for HLS streams with video quality variants
+  if (@available(iOS 15.0, macOS 12.0, *)) {
+    // Check if this is an AVURLAsset (required for variants property)
+    if ([asset isKindOfClass:[AVURLAsset class]]) {
+      AVURLAsset *urlAsset = (AVURLAsset *)asset;
+      
+      // Check if variants property is loaded
+      NSError *variantsError = nil;
+      AVKeyValueStatus variantsStatus = [urlAsset statusOfValueForKey:@"variants" error:&variantsError];
+      
+      if (variantsStatus == AVKeyValueStatusLoaded && urlAsset.variants.count > 0) {
+        // Cache the variants array for later use in selectVideoTrack
+        _cachedAssetVariants = urlAsset.variants;
+        
+        NSMutableArray<FVPMediaSelectionVideoTrackData *> *variantTracks =
+            [[NSMutableArray alloc] init];
+        
+        // Get currently selected variant (if any)
+        // Note: currentVariant is not directly accessible, so we can't determine which variant is currently playing
+        // We'll rely on manual selection tracking instead
+        AVAssetVariant *currentVariant = nil;
+        
+        for (NSInteger i = 0; i < urlAsset.variants.count; i++) {
+          AVAssetVariant *variant = urlAsset.variants[i];
+        
+        // Extract variant information
+        // Note: Cast to NSInteger to ensure integer types for Pigeon
+        NSNumber *bitrate = variant.peakBitRate > 0 ? @((NSInteger)variant.peakBitRate) : nil;
+        NSNumber *width = nil;
+        NSNumber *height = nil;
+        NSNumber *frameRate = nil;
+        NSString *codec = nil;
+        
+        // Get video attributes if available
+        if (variant.videoAttributes) {
+          if (variant.videoAttributes.presentationSize.width > 0) {
+            width = @((NSInteger)variant.videoAttributes.presentationSize.width);
+          }
+          if (variant.videoAttributes.presentationSize.height > 0) {
+            height = @((NSInteger)variant.videoAttributes.presentationSize.height);
+          }
+          if (variant.videoAttributes.nominalFrameRate > 0) {
+            frameRate = @(variant.videoAttributes.nominalFrameRate);
+          }
+          
+          // Get codec information from codec types
+          if (variant.videoAttributes.codecTypes.count > 0) {
+            // Use the first codec type
+            NSNumber *codecType = variant.videoAttributes.codecTypes.firstObject;
+            FourCharCode codecFourCC = (FourCharCode)[codecType unsignedIntValue];
+            
+            switch (codecFourCC) {
+              case kCMVideoCodecType_H264:
+                codec = @"h264";
+                break;
+              case kCMVideoCodecType_HEVC:
+                codec = @"hevc";
+                break;
+              case kCMVideoCodecType_VP9:
+                codec = @"vp9";
+                break;
+              default:
+                codec = nil;
+                break;
+            }
+          }
+        }
+        
+        // Create a display name from available information
+        NSString *displayName = @"Auto";
+        if (width && height) {
+          displayName = [NSString stringWithFormat:@"%ldx%ld", (long)[width integerValue],
+                                                    (long)[height integerValue]];
+          if (bitrate) {
+            double mbps = [bitrate doubleValue] / 1000000.0;
+            displayName = [NSString stringWithFormat:@"%@ (%.1f Mbps)", displayName, mbps];
+          }
+        } else if (bitrate) {
+          double mbps = [bitrate doubleValue] / 1000000.0;
+          displayName = [NSString stringWithFormat:@"%.1f Mbps", mbps];
+        }
+        
+        // Check if this variant is currently selected based on manual selection tracking
+        BOOL isSelected = _isManualVideoSelection && (_selectedVariantIndex == i);
+        
+        FVPMediaSelectionVideoTrackData *trackData =
+            [FVPMediaSelectionVideoTrackData makeWithIndex:i
+                                               displayName:displayName
+                                                isSelected:isSelected
+                                                   bitrate:bitrate
+                                                     width:width
+                                                    height:height
+                                                 frameRate:frameRate
+                                                     codec:codec];
+        
+        [variantTracks addObject:trackData];
+      }
+      
+      // Return variant tracks
+      return [FVPNativeVideoTrackData makeWithAssetTracks:nil
+                                     mediaSelectionTracks:variantTracks];
+      }
+    }
+  }
+
+  // Fallback: try to get tracks from media selection (for older iOS or non-HLS streams)
   AVMediaSelectionGroup *videoGroup =
       [asset mediaSelectionGroupForMediaCharacteristic:AVMediaCharacteristicVisual];
   if (videoGroup && videoGroup.options.count > 0) {
@@ -898,7 +1017,42 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
   AVAsset *asset = currentItem.asset;
 
-  // Check if this is a media selection track (for HLS streams)
+  // For iOS 15+, check if this is an asset variant selection
+  if (@available(iOS 15.0, macOS 12.0, *)) {
+    if ([trackType isEqualToString:@"mediaSelection"] && _cachedAssetVariants) {
+      // Validate that the trackId (index) is valid
+      if (trackId >= 0 && trackId < (NSInteger)_cachedAssetVariants.count) {
+        AVAssetVariant *variant = _cachedAssetVariants[trackId];
+        // Set the preferred variant on the player item using preferredMaximumResolution and preferredPeakBitRate
+        if (variant.videoAttributes) {
+          if ([currentItem respondsToSelector:@selector(setPreferredMaximumResolution:)]) {
+            currentItem.preferredMaximumResolution = variant.videoAttributes.presentationSize;
+          }
+        }
+        if ([currentItem respondsToSelector:@selector(setPreferredPeakBitRate:)]) {
+          currentItem.preferredPeakBitRate = variant.peakBitRate;
+        }
+        // Track that user has manually selected a video track
+        _isManualVideoSelection = YES;
+        _selectedVariantIndex = trackId;
+        return;
+      }
+    } else if ([trackType isEqualToString:@"auto"] && _cachedAssetVariants) {
+      // Re-enable automatic quality selection
+      if ([currentItem respondsToSelector:@selector(setPreferredMaximumResolution:)]) {
+        currentItem.preferredMaximumResolution = CGSizeZero;
+      }
+      if ([currentItem respondsToSelector:@selector(setPreferredPeakBitRate:)]) {
+        currentItem.preferredPeakBitRate = 0;
+      }
+      // Track that we're now in auto mode
+      _isManualVideoSelection = NO;
+      _selectedVariantIndex = -1;
+      return;
+    }
+  }
+
+  // Fallback: Check if this is a media selection track (for older iOS or non-HLS streams)
   if ([trackType isEqualToString:@"mediaSelection"]) {
     // Validate that we have cached options and the trackId (index) is valid
     if (_cachedVideoSelectionOptions && trackId >= 0 &&
