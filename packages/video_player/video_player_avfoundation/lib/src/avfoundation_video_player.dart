@@ -334,9 +334,7 @@ class AVFoundationVideoPlayer extends VideoPlayerPlatform {
   Future<void> selectVideoTrack(int playerId, String? trackId) {
     // Handle null or 'auto' for automatic quality selection
     if (trackId == null || trackId == 'auto') {
-      return _playerWith(
-        id: playerId,
-      ).selectVideoTrack('auto', 0);
+      return _playerWith(id: playerId).selectVideoTrack('auto', 0);
     }
 
     // Parse the trackId to determine type and extract the integer ID

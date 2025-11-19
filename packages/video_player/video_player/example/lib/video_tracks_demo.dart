@@ -132,17 +132,19 @@ class _VideoTracksDemoState extends State<VideoTracksDemo> {
         return;
       }
       final String trackDescription =
-          track == null ? 'Auto' : '${track.label} (${_formatResolution(track)})';
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Selected quality: $trackDescription')));
+          track == null
+              ? 'Auto'
+              : '${track.label} (${_formatResolution(track)})';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Selected quality: $trackDescription')),
+      );
     } catch (e) {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to select video track: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to select video track: $e')),
+      );
     }
   }
 
@@ -266,7 +268,10 @@ class _VideoTracksDemoState extends State<VideoTracksDemo> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
-            ElevatedButton(onPressed: _initializeVideo, child: const Text('Retry')),
+            ElevatedButton(
+              onPressed: _initializeVideo,
+              child: const Text('Retry'),
+            ),
           ],
         ),
       );
@@ -387,7 +392,9 @@ class _VideoTracksDemoState extends State<VideoTracksDemo> {
             fontWeight: isAutoSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),
-        subtitle: const Text('Automatically select best quality based on network'),
+        subtitle: const Text(
+          'Automatically select best quality based on network',
+        ),
         trailing:
             isAutoSelected
                 ? const Icon(Icons.radio_button_checked, color: Colors.blue)
@@ -420,7 +427,8 @@ class _VideoTracksDemoState extends State<VideoTracksDemo> {
             Text('ID: ${track.id}'),
             if (track.width != null && track.height != null)
               Text('Resolution: ${track.width}x${track.height}'),
-            if (track.bitrate != null) Text('Bitrate: ${_formatBitrate(track.bitrate)}'),
+            if (track.bitrate != null)
+              Text('Bitrate: ${_formatBitrate(track.bitrate)}'),
             if (track.frameRate != null)
               Text('Frame Rate: ${track.frameRate!.toStringAsFixed(1)} fps'),
             if (track.codec != null) Text('Codec: ${track.codec}'),

@@ -264,8 +264,7 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
     if (trackSelector != null) {
       DefaultTrackSelector.Parameters parameters = trackSelector.getParameters();
       // Check if there's an override for video track type
-      for (Map.Entry<TrackGroup, TrackSelectionOverride> entry :
-          parameters.overrides.entrySet()) {
+      for (Map.Entry<TrackGroup, TrackSelectionOverride> entry : parameters.overrides.entrySet()) {
         TrackGroup trackGroup = entry.getKey();
         TrackSelectionOverride override = entry.getValue();
         // Check if this override is for a video track

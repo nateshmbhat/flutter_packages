@@ -94,7 +94,7 @@ static NSDictionary<NSString *, NSValue *> *FVPGetPlayerItemObservations(void) {
   NSAssert(self, @"super init cannot be nil");
 
   _viewProvider = viewProvider;
-  
+
   // Initialize video selection tracking flags
   _isManualVideoSelection = NO;
   _manuallySelectedVideoOption = nil;
@@ -718,102 +718,102 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     // Check if this is an AVURLAsset (required for variants property)
     if ([asset isKindOfClass:[AVURLAsset class]]) {
       AVURLAsset *urlAsset = (AVURLAsset *)asset;
-      
+
       // Check if variants property is loaded
       NSError *variantsError = nil;
-      AVKeyValueStatus variantsStatus = [urlAsset statusOfValueForKey:@"variants" error:&variantsError];
-      
+      AVKeyValueStatus variantsStatus = [urlAsset statusOfValueForKey:@"variants"
+                                                                error:&variantsError];
+
       if (variantsStatus == AVKeyValueStatusLoaded && urlAsset.variants.count > 0) {
         // Cache the variants array for later use in selectVideoTrack
         _cachedAssetVariants = urlAsset.variants;
-        
+
         NSMutableArray<FVPMediaSelectionVideoTrackData *> *variantTracks =
             [[NSMutableArray alloc] init];
-        
+
         // Get currently selected variant (if any)
-        // Note: currentVariant is not directly accessible, so we can't determine which variant is currently playing
-        // We'll rely on manual selection tracking instead
+        // Note: currentVariant is not directly accessible, so we can't determine which variant is
+        // currently playing We'll rely on manual selection tracking instead
         AVAssetVariant *currentVariant = nil;
-        
+
         for (NSInteger i = 0; i < urlAsset.variants.count; i++) {
           AVAssetVariant *variant = urlAsset.variants[i];
-        
-        // Extract variant information
-        // Note: Cast to NSInteger to ensure integer types for Pigeon
-        NSNumber *bitrate = variant.peakBitRate > 0 ? @((NSInteger)variant.peakBitRate) : nil;
-        NSNumber *width = nil;
-        NSNumber *height = nil;
-        NSNumber *frameRate = nil;
-        NSString *codec = nil;
-        
-        // Get video attributes if available
-        if (variant.videoAttributes) {
-          if (variant.videoAttributes.presentationSize.width > 0) {
-            width = @((NSInteger)variant.videoAttributes.presentationSize.width);
-          }
-          if (variant.videoAttributes.presentationSize.height > 0) {
-            height = @((NSInteger)variant.videoAttributes.presentationSize.height);
-          }
-          if (variant.videoAttributes.nominalFrameRate > 0) {
-            frameRate = @(variant.videoAttributes.nominalFrameRate);
-          }
-          
-          // Get codec information from codec types
-          if (variant.videoAttributes.codecTypes.count > 0) {
-            // Use the first codec type
-            NSNumber *codecType = variant.videoAttributes.codecTypes.firstObject;
-            FourCharCode codecFourCC = (FourCharCode)[codecType unsignedIntValue];
-            
-            switch (codecFourCC) {
-              case kCMVideoCodecType_H264:
-                codec = @"h264";
-                break;
-              case kCMVideoCodecType_HEVC:
-                codec = @"hevc";
-                break;
-              case kCMVideoCodecType_VP9:
-                codec = @"vp9";
-                break;
-              default:
-                codec = nil;
-                break;
+
+          // Extract variant information
+          // Note: Cast to NSInteger to ensure integer types for Pigeon
+          NSNumber *bitrate = variant.peakBitRate > 0 ? @((NSInteger)variant.peakBitRate) : nil;
+          NSNumber *width = nil;
+          NSNumber *height = nil;
+          NSNumber *frameRate = nil;
+          NSString *codec = nil;
+
+          // Get video attributes if available
+          if (variant.videoAttributes) {
+            if (variant.videoAttributes.presentationSize.width > 0) {
+              width = @((NSInteger)variant.videoAttributes.presentationSize.width);
+            }
+            if (variant.videoAttributes.presentationSize.height > 0) {
+              height = @((NSInteger)variant.videoAttributes.presentationSize.height);
+            }
+            if (variant.videoAttributes.nominalFrameRate > 0) {
+              frameRate = @(variant.videoAttributes.nominalFrameRate);
+            }
+
+            // Get codec information from codec types
+            if (variant.videoAttributes.codecTypes.count > 0) {
+              // Use the first codec type
+              NSNumber *codecType = variant.videoAttributes.codecTypes.firstObject;
+              FourCharCode codecFourCC = (FourCharCode)[codecType unsignedIntValue];
+
+              switch (codecFourCC) {
+                case kCMVideoCodecType_H264:
+                  codec = @"h264";
+                  break;
+                case kCMVideoCodecType_HEVC:
+                  codec = @"hevc";
+                  break;
+                case kCMVideoCodecType_VP9:
+                  codec = @"vp9";
+                  break;
+                default:
+                  codec = nil;
+                  break;
+              }
             }
           }
-        }
-        
-        // Create a display name from available information
-        NSString *displayName = @"Auto";
-        if (width && height) {
-          displayName = [NSString stringWithFormat:@"%ldx%ld", (long)[width integerValue],
-                                                    (long)[height integerValue]];
-          if (bitrate) {
+
+          // Create a display name from available information
+          NSString *displayName = @"Auto";
+          if (width && height) {
+            displayName = [NSString stringWithFormat:@"%ldx%ld", (long)[width integerValue],
+                                                     (long)[height integerValue]];
+            if (bitrate) {
+              double mbps = [bitrate doubleValue] / 1000000.0;
+              displayName = [NSString stringWithFormat:@"%@ (%.1f Mbps)", displayName, mbps];
+            }
+          } else if (bitrate) {
             double mbps = [bitrate doubleValue] / 1000000.0;
-            displayName = [NSString stringWithFormat:@"%@ (%.1f Mbps)", displayName, mbps];
+            displayName = [NSString stringWithFormat:@"%.1f Mbps", mbps];
           }
-        } else if (bitrate) {
-          double mbps = [bitrate doubleValue] / 1000000.0;
-          displayName = [NSString stringWithFormat:@"%.1f Mbps", mbps];
+
+          // Check if this variant is currently selected based on manual selection tracking
+          BOOL isSelected = _isManualVideoSelection && (_selectedVariantIndex == i);
+
+          FVPMediaSelectionVideoTrackData *trackData =
+              [FVPMediaSelectionVideoTrackData makeWithIndex:i
+                                                 displayName:displayName
+                                                  isSelected:isSelected
+                                                     bitrate:bitrate
+                                                       width:width
+                                                      height:height
+                                                   frameRate:frameRate
+                                                       codec:codec];
+
+          [variantTracks addObject:trackData];
         }
-        
-        // Check if this variant is currently selected based on manual selection tracking
-        BOOL isSelected = _isManualVideoSelection && (_selectedVariantIndex == i);
-        
-        FVPMediaSelectionVideoTrackData *trackData =
-            [FVPMediaSelectionVideoTrackData makeWithIndex:i
-                                               displayName:displayName
-                                                isSelected:isSelected
-                                                   bitrate:bitrate
-                                                     width:width
-                                                    height:height
-                                                 frameRate:frameRate
-                                                     codec:codec];
-        
-        [variantTracks addObject:trackData];
-      }
-      
-      // Return variant tracks
-      return [FVPNativeVideoTrackData makeWithAssetTracks:nil
-                                     mediaSelectionTracks:variantTracks];
+
+        // Return variant tracks
+        return [FVPNativeVideoTrackData makeWithAssetTracks:nil mediaSelectionTracks:variantTracks];
       }
     }
   }
@@ -851,9 +851,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       // A track is "selected" only if:
       // 1. User has manually selected a track (not in auto mode), AND
       // 2. This option matches the manually selected option
-      BOOL isSelected = _isManualVideoSelection &&
-                        (_manuallySelectedVideoOption == option ||
-                         [_manuallySelectedVideoOption isEqual:option]);
+      BOOL isSelected = _isManualVideoSelection && (_manuallySelectedVideoOption == option ||
+                                                    [_manuallySelectedVideoOption isEqual:option]);
 
       // Try to extract metadata for bitrate, resolution, etc.
       NSNumber *bitrate = nil;
@@ -1023,7 +1022,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       // Validate that the trackId (index) is valid
       if (trackId >= 0 && trackId < (NSInteger)_cachedAssetVariants.count) {
         AVAssetVariant *variant = _cachedAssetVariants[trackId];
-        // Set the preferred variant on the player item using preferredMaximumResolution and preferredPeakBitRate
+        // Set the preferred variant on the player item using preferredMaximumResolution and
+        // preferredPeakBitRate
         if (variant.videoAttributes) {
           if ([currentItem respondsToSelector:@selector(setPreferredMaximumResolution:)]) {
             currentItem.preferredMaximumResolution = variant.videoAttributes.presentationSize;
