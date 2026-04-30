@@ -1,3 +1,7 @@
+## NEXT
+
+* Updates `video_player_platform_interface` constraint to `^6.7.0`.
+
 ## 2.9.3
 
 * Fixes a regression where HTTP headers were ignored.
